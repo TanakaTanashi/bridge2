@@ -8,9 +8,9 @@ import "./BridgeToken.sol";
 contract Destination is AccessControl {
     bytes32 public constant WARDEN_ROLE = keccak256("BRIDGE_WARDEN_ROLE");
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
-	mapping( address => address) public underlying_tokens;
-	mapping( address => address) public wrapped_tokens;
-	address[] public tokens;
+    mapping(address => address) public wrapped_tokens;
+    mapping(address => address) public underlying_tokens;
+    address[] public tokens;
 
 	event Creation( address indexed underlying_token, address indexed wrapped_token );
 	event Wrap( address indexed underlying_token, address indexed wrapped_token, address indexed to, uint256 amount );
@@ -45,9 +45,9 @@ contract Destination is AccessControl {
         );
 
         address wAddr = address(wtoken);
-        underlying_tokens[_underlying_token] = wAddr;
-        wrapped_tokens[wAddr]               = _underlying_token;
-        tokens.push(_underlying_token);
+        wrapped_tokens[_underlying] = wAddr;
+        underlying_tokens[wAddr]    = _underlying;
+        tokens.push(_underlying);
 
         emit Creation(_underlying_token, wAddr);
         return wAddr;
@@ -62,7 +62,7 @@ contract Destination is AccessControl {
         public
         onlyRole(WARDEN_ROLE)
     {
-        address wAddr = underlying_tokens[_underlying_token];
+        address wAddr = wrapped_tokens[_underlying];
         require(wAddr != address(0), "Destination: token not registered");
         require(_recipient != address(0), "Destination: recipient=0");
         require(_amount > 0,              "Destination: amount=0");
@@ -79,7 +79,7 @@ contract Destination is AccessControl {
     )
         public
     {
-        address underlying = wrapped_tokens[_wrapped_token];
+        address underlying = underlying_tokens[_wrapped];
         require(underlying != address(0), "Destination: unknown wrapped");
         require(_amount > 0,              "Destination: amount=0");
 
