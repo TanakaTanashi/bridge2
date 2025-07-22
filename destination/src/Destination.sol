@@ -1,30 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./BridgeToken.sol";
 
 contract Destination is AccessControl {
-    bytes32 public constant WARDEN_ROLE = keccak256("BRIDGE_WARDEN_ROLE");
+    /* roles */
+    bytes32 public constant WARDEN_ROLE  = keccak256("BRIDGE_WARDEN_ROLE");
     bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
+
     mapping(address => address) public wrapped_tokens;
     mapping(address => address) public underlying_tokens;
     address[] public tokens;
 
-	event Creation( address indexed underlying_token, address indexed wrapped_token );
-	event Wrap( address indexed underlying_token, address indexed wrapped_token, address indexed to, uint256 amount );
-	event Unwrap( address indexed underlying_token, address indexed wrapped_token, address frm, address indexed to, uint256 amount );
+    /* events */
+    event Creation(address indexed underlying_token, address indexed wrapped_token);
+    event Wrap    (address indexed underlying_token,
+                   address indexed wrapped_token,
+                   address indexed to,
+                   uint256          amount);
+    event Unwrap  (address indexed underlying_token,
+                   address indexed wrapped_token,
+                   address          frm,
+                   address indexed to,
+                   uint256          amount);
 
-    constructor( address admin ) {
+    /* constructor */
+    constructor(address admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(CREATOR_ROLE, admin);
-        _grantRole(WARDEN_ROLE, admin);
+        _grantRole(CREATOR_ROLE,        admin);
+        _grantRole(WARDEN_ROLE,         admin);
     }
 
-    // This function deploys a new BridgeToken controlled by this contract
     function createToken(
-        address _underlying_token,
+        address _underlying,
         string  memory name,
         string  memory symbol
     )
@@ -32,16 +41,15 @@ contract Destination is AccessControl {
         onlyRole(CREATOR_ROLE)
         returns (address)
     {
-        require(_underlying_token != address(0), "Destination: underlying=0");
-        require(underlying_tokens[_underlying_token] == address(0),
+        require(_underlying != address(0),          "Destination: underlying=0");
+        require(wrapped_tokens[_underlying] == address(0),
                 "Destination: already registered");
 
-        // Deploy wrapped token
         BridgeToken wtoken = new BridgeToken(
-            _underlying_token,
+            _underlying,
             name,
             symbol,
-            address(this)
+            address(this)          // Destination is admin/minter
         );
 
         address wAddr = address(wtoken);
@@ -49,13 +57,12 @@ contract Destination is AccessControl {
         underlying_tokens[wAddr]    = _underlying;
         tokens.push(_underlying);
 
-        emit Creation(_underlying_token, wAddr);
+        emit Creation(_underlying, wAddr);
         return wAddr;
     }
 
-    // Mint wrapped tokens after a deposit is observed on the source chain
     function wrap(
-        address _underlying_token,
+        address _underlying,
         address _recipient,
         uint256 _amount
     )
@@ -68,12 +75,11 @@ contract Destination is AccessControl {
         require(_amount > 0,              "Destination: amount=0");
 
         BridgeToken(wAddr).mint(_recipient, _amount);
-        emit Wrap(_underlying_token, wAddr, _recipient, _amount);
+        emit Wrap(_underlying, wAddr, _recipient, _amount);
     }
 
-    // Burn wrapped tokens so the underlying token can be released on the source chain
     function unwrap(
-        address _wrapped_token,
+        address _wrapped,
         address _recipient,
         uint256 _amount
     )
@@ -83,9 +89,7 @@ contract Destination is AccessControl {
         require(underlying != address(0), "Destination: unknown wrapped");
         require(_amount > 0,              "Destination: amount=0");
 
-        // Destination contract holds MINTER_ROLE in every BridgeToken it creates
-        BridgeToken(_wrapped_token).burnFrom(msg.sender, _amount);
-
-        emit Unwrap(underlying, _wrapped_token, msg.sender, _recipient, _amount);
+        BridgeToken(_wrapped).burnFrom(msg.sender, _amount);  // Destination (minter) calls burn
+        emit Unwrap(underlying, _wrapped, msg.sender, _recipient, _amount);
     }
 }
